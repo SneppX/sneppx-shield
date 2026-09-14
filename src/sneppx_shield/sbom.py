@@ -22,8 +22,8 @@ def _sha256(file_path):
     return digest.hexdigest()
 
 
-def collect_sbom(root):
-    """Walk *root* and produce an SBOM summary of every file beneath it."""
+def collect_sbom(root, skip_hash=False):
+    """Walk *root* and produce an SBOM summary of every file beneath it (recursive)."""
     root = pathlib.Path(root)
     if not root.exists():
         raise FileNotFoundError(root)
@@ -39,7 +39,7 @@ def collect_sbom(root):
             {
                 "path": rel.replace(os.sep, "/"),
                 "size_bytes": size,
-                "sha256": _sha256(path) if size <= _LOGGED_HASH_MAX else None,
+                "sha256": None if skip_hash or size > _LOGGED_HASH_MAX else _sha256(path),
             }
         )
     return {
@@ -50,12 +50,13 @@ def collect_sbom(root):
     }
 
 
-def to_sbom_json(sbom, path):
+def to_sbom_json(sbom, path=None):
     payload = {
         "format": "sneppx-shield-sbom",
         "version": "0.1.0",
         **sbom,
     }
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2)
+    if path is not None:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
     return payload

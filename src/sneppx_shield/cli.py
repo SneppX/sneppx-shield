@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import pathlib
 import sys
 
@@ -17,6 +18,13 @@ def main(argv=None):
     audit.add_argument("--out", help="write report to this file instead of stdout")
     audit.add_argument("--evidence", help="comma-separated key=value evidence, e.g. model_card=true,risk_assessed=true")
     audit.add_argument("--strict", action="store_true", help="exit non-zero when rating != pass")
+    audit.add_argument("--ci", action="store_true", help="GitHub Actions annotations + exit code (implies --strict)")
+
+    sbom = sub.add_parser("sbom", help="build a software bill of materials for a file or directory (recursive)")
+    sbom.add_argument("target", help="path to the file or directory")
+    sbom.add_argument("--format", choices=["json", "markdown"], default="json")
+    sbom.add_argument("--out", help="write the SBOM to this file instead of stdout")
+    sbom.add_argument("--no-hash", action="store_true", help="skip sha256 hashing (faster for huge artifacts)")
 
     sign = sub.add_parser("sign", help="sign a model artifact (detached Ed25519)")
     sign.add_argument("model", help="path to the model file")
@@ -34,7 +42,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "audit":
+        if args.ci:
+            return _run_audit_ci(args)
         return _run_audit(args)
+    if args.command == "sbom":
+        return _run_sbom(args)
     if args.command == "sign":
         secret_key = _read_key_arg(args.secret_key)
         sig_path, _ = signature.sign_file(args.model, secret_key=secret_key, signer=args.signer)
@@ -78,6 +90,69 @@ def _run_audit(args):
     if args.strict and facts["compliance_rating"] != "pass":
         return 1
     return 0
+
+
+def _run_audit_ci(args):
+    from sneppx_shield import audit
+
+    evidence = _parse_evidence(args.evidence)
+    try:
+        facts = audit.collect(args.model, evidence=evidence)
+    except FileNotFoundError as exc:
+        print(f"::error title=sneppx-shield audit::{exc}", file=sys.stderr)
+        return 2
+
+    print(f"::group::sneppx-shield audit: {facts['model']}")
+    print(f"rating={facts['compliance_rating']} passed={facts['compliance_passed']}/{facts['compliance_total']} signature={facts['signature_verified']}")
+    if args.format == "json":
+        import json as _json
+
+        print(_json.dumps(facts))
+    for f in facts["compliance_findings"]:
+        if not f["passed"]:
+            print(f"::error title=sneppx-shield {f['id']}::{' '.join(f['title'].split())}")
+    print("::endgroup::")
+
+    if facts["compliance_rating"] != "pass":
+        return 1
+    return 0
+
+
+def _run_sbom(args):
+    from sneppx_shield import sbom as sbom_mod
+
+    try:
+        bom = sbom_mod.collect_sbom(args.target, skip_hash=args.no_hash)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.format == "json":
+        payload = sbom_mod.to_sbom_json(bom)
+        text = json.dumps(payload, indent=2)
+    else:
+        lines = ["# SneppX Shield SBOM", "", f"- Target: `{bom['root']}`", f"- Files: {bom['file_count']}"
+                 f"  ({_format_bytes(bom['total_bytes'])})", "", "| Path | Bytes | SHA-256 |", "|------|-------|---------|"]
+        for entry in bom["files"]:
+            sha = entry["sha256"] or "(skipped)"
+            lines.append(f"| {entry['path']} | {entry['size_bytes']} | {sha} |")
+        text = "\n".join(lines) + "\n"
+
+    if args.out:
+        pathlib.Path(args.out).write_text(text, encoding="utf-8")
+        print(f"sbom written -> {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def _format_bytes(num):
+    units = ["B", "KB", "MB", "GB"]
+    value = float(num)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.1f} {unit}"
+        value /= 1024
 
 
 def _parse_evidence(raw):
