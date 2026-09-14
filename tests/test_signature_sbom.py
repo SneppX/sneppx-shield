@@ -4,7 +4,7 @@ import json
 import pytest
 
 from sneppx_shield import sbom
-from sneppx_shield.signature import sign_file, verify_signature
+from sneppx_shield.signature import new_keypair, sign_file, verify_signature
 
 
 def test_collect_sbom_directory(tmp_path):
@@ -46,16 +46,41 @@ def test_sbom_json(tmp_path):
 def test_sign_and_verify_roundtrip(tmp_path):
     f = tmp_path / "artifact.bin"
     f.write_bytes(b"payload" * 10)
-    sig_path, _ = sign_file(f)
+    _, sk = new_keypair()
+    sig_path, payload = sign_file(f, secret_key=sk, signer="ci-bot")
     ok, detail = verify_signature(f, sig_path=sig_path)
     assert ok is True
-    assert detail["signer"] is None
+    assert detail["signer"] == "ci-bot"
+    assert payload["algorithm"] == "ed25519"
+    assert len(payload["signature"]) == 128
+
+
+def test_verify_accepts_explicit_public_key(tmp_path):
+    f = tmp_path / "artifact.bin"
+    f.write_bytes(b"payload" * 10)
+    pk, sk = new_keypair()
+    sign_file(f, secret_key=sk)
+    ok, _ = verify_signature(f, public_key=pk)
+    assert ok is True
+    _, other_sk = new_keypair()
+    sign_file(f, secret_key=other_sk)
+    ok, detail = verify_signature(f, public_key=pk)
+    assert ok is False
+    assert detail["error"] == "signature mismatch"
+
+
+def test_sign_requires_secret_key(tmp_path):
+    f = tmp_path / "artifact.bin"
+    f.write_bytes(b"x")
+    with pytest.raises(ValueError):
+        sign_file(f)
 
 
 def test_verify_rejects_tampered(tmp_path):
     f = tmp_path / "artifact.bin"
     f.write_bytes(b"payload" * 10)
-    sig_path, _ = sign_file(f)
+    _, sk = new_keypair()
+    sig_path, _ = sign_file(f, secret_key=sk)
     f.write_bytes(b"payload" * 10 + b"tampered")
     ok, detail = verify_signature(f, sig_path=sig_path)
     assert ok is False

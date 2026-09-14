@@ -16,9 +16,10 @@ def _facts_all_pass(model):
 def test_compliance_score_all_pass(tmp_path):
     f = tmp_path / "m.bin"
     f.write_bytes(b"data")
-    from sneppx_shield.signature import sign_file
+    from sneppx_shield.signature import new_keypair, sign_file
 
-    sign_file(f)
+    _, sk = new_keypair()
+    sign_file(f, secret_key=sk)
     facts = _facts_all_pass(f)
     assert facts["compliance_passed"] == facts["compliance_total"]
     assert facts["compliance_rating"] == "pass"

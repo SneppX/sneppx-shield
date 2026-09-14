@@ -18,17 +18,42 @@ def main(argv=None):
     audit.add_argument("--evidence", help="comma-separated key=value evidence, e.g. model_card=true,risk_assessed=true")
     audit.add_argument("--strict", action="store_true", help="exit non-zero when rating != pass")
 
-    sign = sub.add_parser("sign", help="sign a model artifact (detached signature)")
+    sign = sub.add_parser("sign", help="sign a model artifact (detached Ed25519)")
     sign.add_argument("model", help="path to the model file")
+    sign.add_argument("--secret-key", help="Ed25519 secret key (hex or @keyfile) - required")
     sign.add_argument("--signer", default=None)
+
+    verify = sub.add_parser("verify", help="verify a detached Ed25519 signature")
+    verify.add_argument("model", help="path to the model file")
+    verify.add_argument("--public-key", help="override the public key embedded in the .sig file")
+    verify.add_argument("--sig", help="path to the signature file (default: <model>.sig)")
+
+    keygen = sub.add_parser("keygen", help="generate an Ed25519 keypair")
+    keygen.add_argument("--out", help="directory to save keys into (optional)")
 
     args = parser.parse_args(argv)
 
     if args.command == "audit":
         return _run_audit(args)
     if args.command == "sign":
-        sig_path, _ = signature.sign_file(args.model, signer=args.signer)
+        secret_key = _read_key_arg(args.secret_key)
+        sig_path, _ = signature.sign_file(args.model, secret_key=secret_key, signer=args.signer)
         print(f"signed -> {sig_path}")
+        return 0
+    if args.command == "verify":
+        pub = _read_key_arg(args.public_key) if args.public_key else None
+        ok, detail = signature.verify_signature(args.model, sig_path=args.sig, public_key=pub)
+        if ok:
+            print(f"OK: signature valid ({detail.get('signer') or 'unknown signer'})")
+            return 0
+        print(f"FAIL: {detail.get('error')}", file=sys.stderr)
+        return 1
+    if args.command == "keygen":
+        pk, sk = signature.new_keypair(save_to=args.out)
+        print(f"public_key : {pk}")
+        print(f"secret_key : {sk}")
+        if args.out:
+            print(f"saved       -> {args.out}")
         return 0
     return 2
 
@@ -65,6 +90,20 @@ def _parse_evidence(raw):
         key, value = item.split("=", 1)
         out[key.strip()] = value.strip().lower() in {"1", "true", "yes"}
     return out
+
+
+def _read_key_arg(value):
+    """Resolve a --secret-key/--public-key argument: inline hex or @file."""
+    if not value:
+        return None
+    if value.startswith("@"):
+        text = pathlib.Path(value[1:]).read_text(encoding="utf-8").strip()
+        # keypair json or bare hex both allowed
+        try:
+            return json.loads(text)["seed"]
+        except (json.JSONDecodeError, KeyError):
+            return text
+    return value
 
 
 if __name__ == "__main__":
