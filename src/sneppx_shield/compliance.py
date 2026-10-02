@@ -55,6 +55,12 @@ _CONTROLS = [
         "title": "Adversarial robustness tested",
         "evidence": "robustness_tested",
     },
+    {
+        "id": "C-09",
+        "frameworks": ["eu-ai-act", "nist-ai-rmf"],
+        "title": "Data governance and provenance documented",
+        "evidence": "data_provenance",
+    },
 ]
 
 
