@@ -132,9 +132,31 @@ def verify_signature(path, sig_path=None, public_key=None):
     except (ValueError, TypeError):
         return False, {"error": "signature verification crashed"}
 
-    if not ok:
+if not ok:
         return False, {"error": "signature mismatch"}
     return True, {"algorithm": payload.get("algorithm"), "signer": payload.get("signer")}
+
+
+def verify_batch(paths, sig_paths=None, public_key=None):
+    """Verify Ed25519 signatures for a batch of artifacts.
+
+    Returns list of ``(ok: bool, detail: dict)`` tuples, one per artifact.
+    ``sig_paths`` and ``public_key`` can be scalars (applied to all) or lists
+    matching the length of ``paths``.
+    """
+    if sig_paths is None:
+        sig_paths = [None] * len(paths)
+    if isinstance(sig_paths, pathlib.Path):
+        sig_paths = [sig_paths] * len(paths)
+    if isinstance(public_key, pathlib.Path):
+        public_key = [public_key] * len(paths)
+
+    results = []
+    for i, path in enumerate(paths):
+        sp = sig_paths[i] if i < len(sig_paths) else None
+        pk = public_key[i] if (isinstance(public_key, list) and i < len(public_key)) else public_key
+        results.append(verify_artifact(path, sp, pk))
+    return results
 
 
 def verify_artifact(path, sig_path=None, public_key=None):
