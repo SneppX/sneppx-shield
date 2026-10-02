@@ -97,6 +97,23 @@ def rating(passed, total):
     return "fail"
 
 
+def rating_details(passed, total):
+    """Return rating string plus breakdown dict."""
+    ratio = passed / total if total else 0.0
+    if ratio >= 0.8:
+        rating = "pass"
+    elif ratio >= 0.5:
+        rating = "review"
+    else:
+        rating = "fail"
+    return {
+        "rating": rating,
+        "passed": passed,
+        "total": total,
+        "ratio": round(ratio, 2),
+    }
+
+
 def matrix():
     """Return control registry for documentation/reporting purposes."""
     return list(_CONTROLS)
