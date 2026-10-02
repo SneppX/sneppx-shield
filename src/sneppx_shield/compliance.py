@@ -64,6 +64,9 @@ _CONTROLS = [
 ]
 
 
+from collections import defaultdict
+
+
 def score(facts):
     """Evaluate controls against facts. Returns (passed, total, findings)."""
     findings = []
@@ -97,3 +100,28 @@ def rating(passed, total):
 def matrix():
     """Return control registry for documentation/reporting purposes."""
     return list(_CONTROLS)
+
+
+def summary(facts):
+    """Return a summary dict of control results grouped by framework."""
+    results = defaultdict(lambda: {"passed": 0, "total": 0, "findings": []})
+    passed = 0
+    total = len(_CONTROLS)
+    for control in _CONTROLS:
+        ev = control["evidence"]
+        frameworks = control["frameworks"]
+        passed_here = bool(facts.get(ev, False)) if ev else False
+        results[tuple(frameworks)]["total"] += 1
+        results[tuple(frameworks)]["passed"] += 1 if passed_here else 0
+        results[tuple(frameworks)]["findings"].append(
+            {
+                "id": control["id"],
+                "title": control["title"],
+                "passed": passed_here,
+            }
+        )
+        passed += 1 if passed_here else 0
+    return {
+        "overall": {"passed": passed, "total": total},
+        "by_framework": {", ".join(fw): r for fw, r in results.items()},
+    }
