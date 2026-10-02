@@ -135,3 +135,48 @@ def verify_signature(path, sig_path=None, public_key=None):
     if not ok:
         return False, {"error": "signature mismatch"}
     return True, {"algorithm": payload.get("algorithm"), "signer": payload.get("signer")}
+
+
+def verify_artifact(path, sig_path=None, public_key=None):
+    """Verify both message hash and Ed25519 signature of an artifact.
+
+    Returns ``(ok: bool, detail: dict)``. Combines hash check and signature
+    verification into a single call for convenience.
+    """
+    path = pathlib.Path(path)
+    sig_path = pathlib.Path(sig_path) if sig_path else pathlib.Path(str(path) + ".sig")
+    if not sig_path.exists():
+        return False, {"error": "no signature file", "sig_path": str(sig_path)}
+    try:
+        payload = json.loads(sig_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, {"error": "unparsable signature", "detail": str(exc)}
+
+    data = path.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    if payload.get("message_sha256") != digest:
+        return False, {
+            "error": "message hash mismatch",
+            "expected": payload.get("message_sha256"),
+            "actual": digest,
+        }
+
+    pk = _coerce_public_key(public_key) if public_key is not None else None
+    if pk is None:
+        try:
+            pk = _coerce_public_key(payload.get("public_key"))
+        except (KeyError, ValueError, TypeError):
+            return False, {"error": "no public key in signature file"}
+    try:
+        sig = bytes.fromhex(payload.get("signature", ""))
+    except (ValueError, TypeError):
+        return False, {"error": "unparsable signature field"}
+
+    try:
+        ok = bool(ed25519.verify(pk, data, sig))
+    except (ValueError, TypeError):
+        return False, {"error": "signature verification crashed"}
+
+    if not ok:
+        return False, {"error": "signature mismatch"}
+    return True, {"algorithm": payload.get("algorithm"), "signer": payload.get("signer")}
