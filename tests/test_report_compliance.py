@@ -8,7 +8,7 @@ def _facts_all_pass(model):
         "model_card": True,
         "monitoring": True,
         "access_control": True,
-        "robustness_tested": True,
+        "robustness_tested": True, "data_provenance": True,
     }
     return audit.collect(model, evidence=evidence)
 

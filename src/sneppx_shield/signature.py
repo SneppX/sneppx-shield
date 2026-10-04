@@ -132,9 +132,12 @@ def verify_signature(path, sig_path=None, public_key=None):
     except (ValueError, TypeError):
         return False, {"error": "signature verification crashed"}
 
-if not ok:
+    if not ok:
         return False, {"error": "signature mismatch"}
-    return True, {"algorithm": payload.get("algorithm"), "signer": payload.get("signer")}
+    return True, {
+        "algorithm": payload.get("algorithm"),
+        "signer": payload.get("signer"),
+    }
 
 
 def verify_batch(paths, sig_paths=None, public_key=None):
@@ -154,7 +157,11 @@ def verify_batch(paths, sig_paths=None, public_key=None):
     results = []
     for i, path in enumerate(paths):
         sp = sig_paths[i] if i < len(sig_paths) else None
-        pk = public_key[i] if (isinstance(public_key, list) and i < len(public_key)) else public_key
+        pk = (
+            public_key[i]
+            if (isinstance(public_key, list) and i < len(public_key))
+            else public_key
+        )
         results.append(verify_artifact(path, sp, pk))
     return results
 
@@ -201,4 +208,7 @@ def verify_artifact(path, sig_path=None, public_key=None):
 
     if not ok:
         return False, {"error": "signature mismatch"}
-    return True, {"algorithm": payload.get("algorithm"), "signer": payload.get("signer")}
+    return True, {
+        "algorithm": payload.get("algorithm"),
+        "signer": payload.get("signer"),
+    }

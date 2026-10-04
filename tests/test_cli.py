@@ -65,7 +65,7 @@ def test_sbom_cli_missing(tmp_path, capsys):
 def test_audit_ci_pass(tmp_path, capsys):
     art = _make_artifact(tmp_path)
     evidence = ("model_card=true,risk_assessed=true,human_oversight=true,"
-                "monitoring=true,access_control=true,robustness_tested=true")
+                "monitoring=true,access_control=true,robustness_tested=true,data_provenance=true")
     rc = cli.main(["audit", str(art), "--ci", "--evidence", evidence])
     out = capsys.readouterr().out
     assert rc == 0

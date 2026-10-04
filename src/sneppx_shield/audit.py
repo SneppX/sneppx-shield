@@ -28,6 +28,7 @@ def collect(model_path, evidence=None):
         "monitoring": evidence.get("monitoring", False),
         "access_control": evidence.get("access_control", False),
         "robustness_tested": evidence.get("robustness_tested", False),
+        "data_provenance": evidence.get("data_provenance", False),
         "bom": bom,
     }
     passed, total, findings = compliance.score(facts)
